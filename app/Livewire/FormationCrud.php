@@ -8,7 +8,6 @@ use Livewire\WithFileUploads;
 use App\Models\Formation;
 use App\Models\Formateur;
 use Illuminate\Support\Facades\Storage;
-use Jantinnerezo\LivewireAlert\Facades\LivewireAlert;
 
 class FormationCrud extends Component
 {
@@ -33,24 +32,30 @@ class FormationCrud extends Component
     public $video;
     public $formateur_id;
 
-    protected function rules()
-    {
-        return [
-            'titre' => 'required|string|max:255',
-            'description' => 'required|string',
-            'objectif' => 'nullable|string',
-            'session' => 'nullable|string|max:255',
-            'prerequis' => 'nullable|string',
-            'duree' => 'nullable|string|max:255',
-            'date_debut' => 'nullable|date',
-            'date_fin' => 'nullable|date|after_or_equal:date_debut',
-            'lieu' => 'nullable|string|max:255',
-            'prix' => 'required|numeric|min:0',
-            'photo' => 'nullable|image|mimes:jpg,png,webp|max:15360',
-            'video' => 'nullable|string|max:255',
-            'formateur_id' => 'required|exists:formateurs,id',
-        ];
-    }
+    protected $rules = [
+        'titre' => 'required|string|max:255',
+        'description' => 'required|string',
+        'objectif' => 'nullable|string',
+        'session' => 'nullable|string|max:255',
+        'prerequis' => 'nullable|string',
+        'duree' => 'nullable|string|max:255',
+        'date_debut' => 'nullable|date',
+        'date_fin' => 'nullable|date|after_or_equal:date_debut',
+        'lieu' => 'nullable|string|max:255',
+        'prix' => 'required|numeric|min:0',
+        'photo' => 'nullable|image|mimes:jpg,png,webp|max:15360',
+        'video' => 'nullable|string|max:255',
+        'formateur_id' => 'required|exists:formateurs,id',
+    ];
+
+    protected $messages = [
+        'titre.required' => 'Le titre est obligatoire.',
+        'description.required' => 'La description est obligatoire.',
+        'prix.required' => 'Le prix est obligatoire.',
+        'prix.numeric' => 'Le prix doit être un nombre.',
+        'formateur_id.required' => 'Le formateur est obligatoire.',
+        'date_fin.after_or_equal' => 'La date de fin doit être postérieure ou égale à la date de début.',
+    ];
 
     public function render()
     {
@@ -58,13 +63,21 @@ class FormationCrud extends Component
 
         $formations = Formation::with('formateur')
             ->when($this->searchTerm, function ($query) {
-                $query->where('titre', 'like', "%{$this->searchTerm}%");
+                $query->where('titre', 'like', "%{$this->searchTerm}%")
+                      ->orWhere('description', 'like', "%{$this->searchTerm}%")
+                      ->orWhere('objectif', 'like', "%{$this->searchTerm}%");
             })
             ->latest()
-            ->paginate(5);
+            ->paginate(10);
 
         return view('livewire.formation-crud', compact('formations', 'formateurs'))
             ->layout('layouts.defaultbackend', ['title' => 'Formations']);
+    }
+
+    public function resetFormAndOpen()
+    {
+        $this->resetForm();
+        $this->dispatch('openModal');
     }
 
     public function addFormation()
@@ -93,6 +106,7 @@ class FormationCrud extends Component
 
         $this->resetForm();
         session()->flash('message', 'Formation ajoutée avec succès.');
+        $this->dispatch('closeModal');
     }
 
     public function editFormation($id)
@@ -126,6 +140,7 @@ class FormationCrud extends Component
 
         $photoPath = $formation->photo;
         if ($this->photo) {
+            // Supprimer l'ancienne photo si elle existe
             if ($formation->photo && Storage::disk('public')->exists($formation->photo)) {
                 Storage::disk('public')->delete($formation->photo);
             }
@@ -150,31 +165,28 @@ class FormationCrud extends Component
 
         $this->resetForm();
         session()->flash('message', 'Formation modifiée avec succès.');
+        $this->dispatch('closeModal');
     }
 
     public function deleteFormation($id)
     {
-        LivewireAlert::title('Suppression')
-            ->text('Voulez-vous vraiment supprimer cette formation ?')
-            ->asConfirm()
-            ->onConfirm('deleteItem', ['id' => $id])
-            ->show();
-    }
-
-    public function deleteItem($data)
-    {
-        $formation = Formation::find($data['id']);
+        $formation = Formation::find($id);
 
         if ($formation) {
+            // Supprimer la photo si elle existe
             if ($formation->photo && Storage::disk('public')->exists($formation->photo)) {
                 Storage::disk('public')->delete($formation->photo);
             }
             $formation->delete();
+            
+            session()->flash('message', 'Formation supprimée avec succès.');
         }
+    }
 
-        LivewireAlert::success('Succès', 'Formation supprimée avec succès')
-            ->timer(3000)
-            ->show();
+    public function confirmDelete($id)
+    {
+        $this->formationId = $id;
+        $this->dispatch('confirmDelete');
     }
 
     private function resetForm()
@@ -192,6 +204,7 @@ class FormationCrud extends Component
             'lieu',
             'prix',
             'photo',
+            'photo_old',
             'video',
             'formateur_id',
             'editMode',
