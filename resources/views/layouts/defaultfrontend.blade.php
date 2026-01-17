@@ -3,13 +3,13 @@
 
 <head>
     <meta charset="utf-8">
-    <title>eLEARNING - eLearning HTML Template</title>
+    <title>CFP Mon Coeur</title>
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
     <meta content="" name="keywords">
     <meta content="" name="description">
 
-    <!-- Favicon -->
-    <link href="{{asset('assets_frontend/img/favicon.ico')}}" rel="icon">
+    <!-- Favicon Icon -->
+  <link rel="icon" type="image/png" href="{{ asset('assets_backend/images/favicon.png?v=1') }}">
 
     <!-- Google Web Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
