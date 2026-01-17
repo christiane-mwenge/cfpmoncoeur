@@ -16,6 +16,7 @@ class FormationCrud extends Component
     public $searchTerm = '';
     public $editMode = false;
     public $formationId;
+    public $displayMode = 'grid';
 
     // Champs du formulaire
     public $titre;
@@ -43,7 +44,7 @@ class FormationCrud extends Component
         'date_fin' => 'nullable|date|after_or_equal:date_debut',
         'lieu' => 'nullable|string|max:255',
         'prix' => 'required|numeric|min:0',
-        'photo' => 'nullable|image|mimes:jpg,png,webp|max:15360',
+        'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:15360',
         'video' => 'nullable|string|max:255',
         'formateur_id' => 'required|exists:formateurs,id',
     ];
@@ -61,17 +62,49 @@ class FormationCrud extends Component
     {
         $formateurs = Formateur::all();
 
-        $formations = Formation::with('formateur')
+        $query = Formation::with('formateur')
             ->when($this->searchTerm, function ($query) {
                 $query->where('titre', 'like', "%{$this->searchTerm}%")
                       ->orWhere('description', 'like', "%{$this->searchTerm}%")
-                      ->orWhere('objectif', 'like', "%{$this->searchTerm}%");
-            })
-            ->latest()
-            ->paginate(10);
+                      ->orWhere('objectif', 'like', "%{$this->searchTerm}%")
+                      ->orWhereHas('formateur', function ($q) {
+                          $q->where('nom', 'like', "%{$this->searchTerm}%")
+                            ->orWhere('prenom', 'like', "%{$this->searchTerm}%");
+                      });
+            });
+
+        if (in_array($this->displayMode, ['grid', 'list'])) {
+            $query->where(function ($q) {
+                $q->whereNull('date_fin')
+                  ->orWhere('date_fin', '>=', now());
+            })->orderBy('date_debut', 'asc');
+            $perPage = $this->displayMode === 'grid' ? 9 : 10;
+        } else {
+            $query->orderBy('created_at', 'desc');
+            $perPage = 10;
+        }
+
+        $formations = $query->paginate($perPage);
 
         return view('livewire.formation-crud', compact('formations', 'formateurs'))
             ->layout('layouts.defaultbackend', ['title' => 'Formations']);
+    }
+
+    // Méthode pour obtenir l'URL complète de la photo
+    public function getPhotoUrl($path)
+    {
+        if (!$path) return null;
+        
+        if (filter_var($path, FILTER_VALIDATE_URL)) {
+            return $path;
+        }
+        
+        // Utiliser asset() pour les fichiers stockés
+        if (Storage::disk('public')->exists($path)) {
+            return asset('storage/' . $path);
+        }
+        
+        return null;
     }
 
     public function resetFormAndOpen()
@@ -84,9 +117,11 @@ class FormationCrud extends Component
     {
         $this->validate();
 
-        $photoPath = $this->photo
-            ? $this->photo->store('photoformations', 'public')
-            : null;
+        $photoPath = null;
+        if ($this->photo) {
+            // Stocker dans un sous-dossier par année/mois
+            $photoPath = $this->photo->store('formations/' . date('Y/m'), 'public');
+        }
 
         Formation::create([
             'titre' => $this->titre,
@@ -140,11 +175,12 @@ class FormationCrud extends Component
 
         $photoPath = $formation->photo;
         if ($this->photo) {
-            // Supprimer l'ancienne photo si elle existe
+            // Supprimer l'ancienne photo
             if ($formation->photo && Storage::disk('public')->exists($formation->photo)) {
                 Storage::disk('public')->delete($formation->photo);
             }
-            $photoPath = $this->photo->store('photoformations', 'public');
+            // Stocker la nouvelle photo
+            $photoPath = $this->photo->store('formations/' . date('Y/m'), 'public');
         }
 
         $formation->update([
@@ -173,20 +209,14 @@ class FormationCrud extends Component
         $formation = Formation::find($id);
 
         if ($formation) {
-            // Supprimer la photo si elle existe
+            // Supprimer la photo
             if ($formation->photo && Storage::disk('public')->exists($formation->photo)) {
                 Storage::disk('public')->delete($formation->photo);
             }
-            $formation->delete();
             
+            $formation->delete();
             session()->flash('message', 'Formation supprimée avec succès.');
         }
-    }
-
-    public function confirmDelete($id)
-    {
-        $this->formationId = $id;
-        $this->dispatch('confirmDelete');
     }
 
     private function resetForm()
@@ -209,5 +239,6 @@ class FormationCrud extends Component
             'formateur_id',
             'editMode',
         ]);
+        $this->resetErrorBag();
     }
 }
