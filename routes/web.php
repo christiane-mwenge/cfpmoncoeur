@@ -8,7 +8,7 @@ use App\Livewire\EtudiantCrud;
 use App\Livewire\InscriptionCrud;
 use App\Livewire\DonsCrud;
 use App\Livewire\Front\Index;
-
+use App\Livewire\Front\About;
 
 
 
@@ -19,6 +19,9 @@ Route::get('/', function () {
 // routes all front
  Route::get('/acceuil', Index::class)
         ->name('acceuil');
+        
+    Route::get('/about', About::class)
+        ->name('about');
 
 
 
